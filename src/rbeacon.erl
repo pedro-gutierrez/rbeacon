@@ -44,7 +44,8 @@
                 transmit,
                 noecho=false,
                 tref=nil,
-                pending_recv=nil}).
+                pending_recv=nil,
+                mode=broadcast}).
 
 %% default interval
 -define(DEFAULT_INTERVAL, 1000).
@@ -60,7 +61,8 @@
                         {active, true | false | once | integer()} |
                         {interval, integer()} |
                         noecho |
-                        {noecho, true | false}].
+                        {noecho, true | false} |
+                        {mode, broadcast | unicast}].
 -export_type([beacon_opts/0]).
 
 
@@ -193,9 +195,10 @@ init([Port, Owner, Options]) ->
     Active = proplists:get_value(active, Options, false),
     Interval = proplists:get_value(interval, Options, ?DEFAULT_INTERVAL),
     NoEcho = proplists:get_value(noecho, Options, false),
+    Mode = proplists:get_value(mode, Options, broadcast),
 
     %% init the socket
-    {ok, Sock} = open_udp_port(Port, Active),
+    {ok, Sock} = open_udp_port(Port, Active, Mode),
 
     %% get broadcast address
     {Addr, BroadcastAddr} = broadcast_addr(),
@@ -211,7 +214,8 @@ init([Port, Owner, Options]) ->
                 active=Active,
                 interval=Interval,
                 noecho=NoEcho,
-                owner=Owner}}.
+                owner=Owner,
+                mode=Mode}}.
 %% @private
 handle_call(close, _From, State) ->
     ok = cancel_timer(State),
@@ -397,10 +401,10 @@ new_recv_timeout(Timeout, From) ->
     TDiff = timer:now_diff(os:timestamp(), From),
     Timeout - TDiff.
 
-open_udp_port(Port, Active) ->
+open_udp_port(Port, Active, Mode) ->
     %% defaullt options
     Options0 = [{active, Active},
-                {broadcast, true},
+                {broadcast, broadcast =:= Mode},
                 {reuseaddr, true},
                 inet,
                 binary],
@@ -502,6 +506,11 @@ to_binary(V) when is_binary(V) ->
 
 validate_options([]) ->
     ok;
+
+validate_options([{mode, unicast} | Rest]) ->
+    validate_options(Rest);
+validate_options([{mode, broadcast} | Rest]) ->
+    validate_options(Rest);
 validate_options([{active, N} | Rest]) when is_integer(N) ->
     validate_options(Rest);
 validate_options([{active, once} | Rest]) ->
@@ -524,6 +533,10 @@ validate_options(_) ->
 
 do_setopts([], State) ->
     {ok, State};
+
+do_setopts([{mode, Mode} | Rest], #state{sock=S}=State) ->
+    ok = inet:setopts(S, [{broadcast, broadcast =:= Mode}]),
+    do_setopts(Rest, State#state{mode=Mode});
 do_setopts([{active, Active} | Rest], #state{sock=S}=State) ->
     ok = inet:setopts(S, [{active, Active}]),
     do_setopts(Rest, State#state{active=Active});
