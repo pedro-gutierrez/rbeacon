@@ -355,7 +355,7 @@ cancel_timer(#state{tref=Tref}) ->
     ok.
 
 
-transmit_msg(Msg, #state{sock=Sock, port=Port, broadcast_addr=Addr}) ->
+transmit_msg(Msg, #state{sock=Sock, port=Port, mode=broadcast, broadcast_addr=Addr}) ->
     gen_udp:send(Sock, Addr, Port, Msg).
 
 filter_match(_, all) -> true;
