@@ -371,9 +371,9 @@ transmit_msg(Msg, #state{sock=Sock, port=Port, mode=broadcast, broadcast_addr=Ad
 transmit_msg(Msg, #state{sock=Sock, port=Port, mode={unicast, Srv}, local_addrs=LocalIps}) ->
     case inet:gethostbyname(Srv) of
         {ok, {hostent, _, _, inet, _, ServiceIps}} -> 
-            [ gen_udp:send(Sock, Ip, Port, Msg) || Ip <- ServiceIps -- LocalIps],
+            [ gen_udp:send(Sock, Ip, Port, Msg) || Ip <- ServiceIps -- LocalIps];
         {error, E} ->
-            error_logger:info_msg("can't resolve ~p~n", [Srv]),
+            error_logger:info_msg("can't resolve ~p: ~p~n", [Srv, E])
     end,
     ok.
 
