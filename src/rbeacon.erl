@@ -369,8 +369,13 @@ transmit_msg(Msg, #state{sock=Sock, port=Port, mode=broadcast, broadcast_addr=Ad
     gen_udp:send(Sock, Addr, Port, Msg);
 
 transmit_msg(Msg, #state{sock=Sock, port=Port, mode={unicast, Srv}, local_addrs=LocalIps}) ->
-    {ok, {hostent, _, _, inet, _, ServiceIps}} = inet:gethostbyname(Srv),
-    [ gen_udp:send(Sock, Ip, Port, Msg) || Ip <- ServiceIps -- LocalIps].
+    case inet:gethostbyname(Srv) of
+        {ok, {hostent, _, _, inet, _, ServiceIps}} -> 
+            [ gen_udp:send(Sock, Ip, Port, Msg) || Ip <- ServiceIps -- LocalIps],
+        {error, E} ->
+            error_logger:info_msg("can't resolve ~p~n", [Srv]),
+    end,
+    ok.
 
 filter_match(_, all) -> true;
 filter_match(Msg, Filter) when byte_size(Msg) >= byte_size(Filter) ->
