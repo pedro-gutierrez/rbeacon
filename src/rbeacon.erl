@@ -37,6 +37,7 @@
                 port,
                 addr,
                 broadcast_addr,
+                local_addrs,
                 active=false,
                 owner,
                 filter,
@@ -62,7 +63,7 @@
                         {interval, integer()} |
                         noecho |
                         {noecho, true | false} |
-                        {mode, broadcast | unicast}].
+                        {mode, broadcast | {unicast, string()}}].
 -export_type([beacon_opts/0]).
 
 
@@ -202,6 +203,10 @@ init([Port, Owner, Options]) ->
 
     %% get broadcast address
     {Addr, BroadcastAddr} = broadcast_addr(),
+    
+    %% get local ips
+    {ok, Localhost} = inet:gethostname(),
+    {ok, {hostent, _, _, inet, _, LocalAddrs}} = inet:gethostbyname(Localhost),
 
 
     %% trap exit
@@ -211,6 +216,7 @@ init([Port, Owner, Options]) ->
                 port=Port,
                 addr=Addr,
                 broadcast_addr=BroadcastAddr,
+                local_addrs=LocalAddrs,
                 active=Active,
                 interval=Interval,
                 noecho=NoEcho,
@@ -356,7 +362,11 @@ cancel_timer(#state{tref=Tref}) ->
 
 
 transmit_msg(Msg, #state{sock=Sock, port=Port, mode=broadcast, broadcast_addr=Addr}) ->
-    gen_udp:send(Sock, Addr, Port, Msg).
+    gen_udp:send(Sock, Addr, Port, Msg);
+
+transmit_msg(Msg, #state{sock=Sock, port=Port, mode={unicast, Srv}, local_addrs=LocalIps}) ->
+    {ok, {hostent, _, _, inet, _, ServiceIps}} = inet:gethostbyname(Srv),
+    [ gen_udp:send(Sock, Ip, Port, Msg) || Ip <- ServiceIps -- LocalIps].
 
 filter_match(_, all) -> true;
 filter_match(Msg, Filter) when byte_size(Msg) >= byte_size(Filter) ->
@@ -507,7 +517,7 @@ to_binary(V) when is_binary(V) ->
 validate_options([]) ->
     ok;
 
-validate_options([{mode, unicast} | Rest]) ->
+validate_options([{mode, {unicast, Addr}} | Rest]) when is_list(Addr)->
     validate_options(Rest);
 validate_options([{mode, broadcast} | Rest]) ->
     validate_options(Rest);
@@ -534,9 +544,12 @@ validate_options(_) ->
 do_setopts([], State) ->
     {ok, State};
 
-do_setopts([{mode, Mode} | Rest], #state{sock=S}=State) ->
-    ok = inet:setopts(S, [{broadcast, broadcast =:= Mode}]),
+do_setopts([{mode, {unicast, _}=Mode} | Rest], #state{sock=S}=State) ->
+    ok = inet:setopts(S, [{broadcast, false}]),
     do_setopts(Rest, State#state{mode=Mode});
+do_setopts([{mode, broadcast} | Rest], #state{sock=S}=State) ->
+    ok = inet:setopts(S, [{broadcast, true}]),
+    do_setopts(Rest, State#state{mode=broadcast});
 do_setopts([{active, Active} | Rest], #state{sock=S}=State) ->
     ok = inet:setopts(S, [{active, Active}]),
     do_setopts(Rest, State#state{active=Active});
