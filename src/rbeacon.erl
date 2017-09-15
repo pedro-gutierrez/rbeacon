@@ -76,8 +76,12 @@ new(Port) ->
 -spec new(Port::integer(), Options::beacon_opts())
     -> {ok, beacon()} | {error, term()}.
 new(Port, Options) ->
-    ok = validate_options(Options),
-    gen_server:start_link(?MODULE, [Port, self(), Options], []).
+    case validate_options(Options) of
+        ok -> 
+            gen_server:start_link(?MODULE, [Port, self(), Options], []);
+        Error -> 
+            Error
+    end.
 
 
 %% @doc close a beacon
